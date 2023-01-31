@@ -12,6 +12,8 @@ import WebKit
 public class TeslaWebLoginViewController: UIViewController {
     var webView = WKWebView()
     var result: ((Result<URL, Error>) -> Void)?
+    
+    public var shouldDismiss: Bool = true
 
     required init?(coder: NSCoder) {
         fatalError("not supported")
@@ -32,7 +34,9 @@ extension TeslaWebLoginViewController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if let url = navigationAction.request.url, url.absoluteString.starts(with: "https://auth.tesla.com/void/callback")  {
             decisionHandler(.cancel)
-            self.dismiss(animated: true, completion: nil)
+            if shouldDismiss {
+                self.dismiss(animated: true, completion: nil)
+            }
             self.result?(Result.success(url))
         } else {
             decisionHandler(.allow)
@@ -41,7 +45,9 @@ extension TeslaWebLoginViewController: WKNavigationDelegate {
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         self.result?(Result.failure(TeslaError.authenticationFailed))
-        self.dismiss(animated: true, completion: nil)
+        if shouldDismiss {
+            self.dismiss(animated: true, completion: nil)
+        }
     }
 }
 
