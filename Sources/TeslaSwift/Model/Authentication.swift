@@ -115,7 +115,7 @@ class AuthTokenRequestWeb: Encodable {
 
     init(grantType: GrantType = .authorizationCode, code: String? = nil, refreshToken: String? = nil) {
         if grantType == .authorizationCode {
-            codeVerifier = oAuthClientID.codeVerifier
+            codeVerifier = CodeChallengeHelper.verifier
             self.code = code
             redirectURI = oAuthRedirectURI
         } else if grantType == .refreshToken {
@@ -148,12 +148,12 @@ class AuthCodeRequest: Encodable {
     var clientSecret = oAuthClientSecret
     var redirectURI = oAuthRedirectURI
     var scope = oAuthScope
-    let codeChallenge: String
+    let codeChallenge: String?
     var codeChallengeMethod = "S256"
     var state = "teslaSwift"
 
     init() {
-        self.codeChallenge = clientID.codeVerifier.challenge
+        self.codeChallenge = CodeChallengeHelper.challange
     }
 
     // MARK: Codable protocol
@@ -179,6 +179,50 @@ class AuthCodeRequest: Encodable {
             URLQueryItem(name: CodingKeys.codeChallengeMethod.rawValue, value: codeChallengeMethod),
             URLQueryItem(name: CodingKeys.state.rawValue, value: state)
         ]
+    }
+}
+
+// MARK: - PKCE Code Verifier & Code Challenge
+
+enum PKCEError: Error {
+    case failedToGenerateRandomOctets
+    case failedToCreateChallengeForVerifier
+}
+
+struct CodeChallengeHelper {
+    static let verifier = try? base64URLEncode(octets: generateCryptographicallySecureRandomOctets(count: 64))
+    
+    static let challange: String? = {
+        guard let verifier = verifier else {
+            return nil
+        }
+        
+        let challenge = verifier
+            .data(using: .ascii)
+            .map { SHA256.hash(data: $0) }
+            .map { base64URLEncode(octets: $0) }
+        
+        return challenge
+    }()
+    
+    private static func generateCryptographicallySecureRandomOctets(count: Int) throws -> [UInt8] {
+        var octets = [UInt8](repeating: 0, count: count)
+        let status = SecRandomCopyBytes(kSecRandomDefault, octets.count, &octets)
+        if status == errSecSuccess {
+            return octets
+        } else {
+            throw PKCEError.failedToGenerateRandomOctets
+        }
+    }
+    
+    private static func base64URLEncode<S>(octets: S) -> String where S: Sequence, UInt8 == S.Element {
+        let data = Data(octets)
+        return data
+            .base64EncodedString()
+            .replacingOccurrences(of: "=", with: "")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .trimmingCharacters(in: .whitespaces)
     }
 }
 
